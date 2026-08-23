@@ -3,39 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>WTC Territory Navigator</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
-html, body{
-  margin:0;
-  height:100%;
+html,body{
+margin:0;
+height:100%;
 }
 #map{
-  width:100%;
-  height:100vh;
+width:100%;
+height:100vh;
+}
+.info{
+position:absolute;
+top:10px;
+left:10px;
+z-index:1000;
+background:white;
+padding:10px 14px;
+border-radius:12px;
+font-family:Arial;
+box-shadow:0 2px 10px rgba(0,0,0,.2);
 }
 </style>
+
 </head>
 
 <body>
+
+<div class="info" id="title">
+Loading territory...
+</div>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-const map=L.map('map').setView([16.265852,120.409395],16);
+
+const map=L.map("map").setView([16.265852,120.409395],16);
 
 L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 {
-attribution:'© OpenStreetMap'
+attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-let marker=null;
+let myMarker=null;
 
 navigator.geolocation.watchPosition(
 
@@ -44,24 +62,27 @@ function(pos){
 const lat=pos.coords.latitude;
 const lng=pos.coords.longitude;
 
-if(marker){
-marker.setLatLng([lat,lng]);
+if(myMarker){
+
+myMarker.setLatLng([lat,lng]);
+
 }else{
-marker=L.circleMarker([lat,lng],{
+
+myMarker=L.circleMarker(
+[lat,lng],
+{
 radius:8,
 color:"#2563EB",
 fillColor:"#2563EB",
 fillOpacity:1
-}).addTo(map);
+}
+).addTo(map);
+
 }
 
-map.setView([lat,lng]);
-
 },
 
-function(){
-alert("Please allow location access.");
-},
+function(){},
 
 {
 enableHighAccuracy:true,
@@ -70,6 +91,64 @@ timeout:10000
 }
 
 );
+
+const params=new URLSearchParams(window.location.search);
+const selected=params.get("territory");
+
+fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=765451801&single=true&output=csv")
+
+.then(r=>r.text())
+
+.then(text=>{
+
+const rows=text.trim().split("\n").map(r=>r.split(","));
+
+const header=rows.shift();
+
+const tid=header.indexOf("TerritoryID");
+const name=header.indexOf("Territory Name");
+const lat=header.indexOf("Latitude");
+const lng=header.indexOf("Longitude");
+
+const bounds=[];
+
+rows.forEach(r=>{
+
+if(r[tid]==selected){
+
+const la=parseFloat(r[lat]);
+const lo=parseFloat(r[lng]);
+
+if(!isNaN(la)&&!isNaN(lo)){
+
+bounds.push([la,lo]);
+
+L.circleMarker(
+[la,lo],
+{
+radius:4,
+color:"#16A34A",
+fillColor:"#16A34A",
+fillOpacity:1
+}
+).addTo(map);
+
+}
+
+document.getElementById("title").innerHTML="📍 "+r[name];
+
+}
+
+});
+
+if(bounds.length){
+
+map.fitBounds(bounds,{padding:[40,40]});
+
+}
+
+});
+
 </script>
 
 </body>
