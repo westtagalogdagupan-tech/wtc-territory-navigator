@@ -1,51 +1,80 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WTC Territory Navigator</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html,body,#map{height:100%;margin:0;}
-.info{
-position:absolute;
-top:12px;
-left:50px;
-z-index:1000;
-background:white;
-padding:10px 14px;
-border-radius:10px;
-font-family:Arial,sans-serif;
-box-shadow:0 2px 8px rgba(0,0,0,.25);
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+#status {
+  position: absolute;
+  top: 12px;
+  left: 55px;
+  z-index: 1000;
+  background: white;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
-<div class="info" id="status">Loading territory...</div>
+<div id="status">Loading territory...</div>
 
 <script>
+// ----------------------------
+// CONFIG
+// ----------------------------
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
+
+// ----------------------------
+// GET TERRITORY FROM URL
+// ----------------------------
 const params = new URLSearchParams(window.location.search);
 const territoryNumber = params.get("territory");
-const territoryID = territoryNumber ? "T" + territoryNumber.padStart(3,"0") : null;
+const territoryID = territoryNumber
+  ? "T" + territoryNumber.padStart(3,"0")
+  : null;
 
-const map = L.map("map").setView([16.04,120.33],14);
+// ----------------------------
+// MAP
+// ----------------------------
+const map = L.map("map").setView([16.043,120.334],13);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  attribution:"© OpenStreetMap"
-}).addTo(map);
+L.tileLayer(
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {
+    attribution:"© OpenStreetMap"
+  }
+).addTo(map);
 
-// ✅ Fixed geolocation
+// ----------------------------
+// LIVE LOCATION (FIXED)
+// ----------------------------
 let myMarker = null;
 
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(
     function(pos){
+
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
 
@@ -59,40 +88,43 @@ if (navigator.geolocation) {
           fillOpacity:1
         }).addTo(map);
       }
+
     },
     function(err){
-      console.log("Location unavailable", err);
+      console.log("Location error:", err);
     },
     {
       enableHighAccuracy:true,
-      maximumAge:0
+      maximumAge:0,
+      timeout:10000
     }
   );
 }
 
-const csvURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
-
-Papa.parse(csvURL,{
+// ----------------------------
+// LOAD PEOPLE
+// ----------------------------
+Papa.parse(CSV_URL,{
   download:true,
   header:true,
   skipEmptyLines:true,
-  complete:function(result){
 
-    console.log("Territory:", territoryID);
-    console.log("Rows:", result.data.length);
+  complete:function(result){
 
     let bounds=[];
     let count=0;
 
     result.data.forEach(row=>{
 
-      if(territoryID && row.TerritoryID.trim()!==territoryID) return;
+      if(territoryID && row.TerritoryID.trim()!=territoryID) return;
 
       const coord=(row.Coordinates||"").split(",");
+
       if(coord.length!==2) return;
 
       const lat=parseFloat(coord[0]);
       const lng=parseFloat(coord[1]);
+
       if(isNaN(lat)||isNaN(lng)) return;
 
       count++;
@@ -103,23 +135,41 @@ Papa.parse(csvURL,{
         color:"#DC2626",
         fillColor:"#DC2626",
         fillOpacity:1
-      }).addTo(map)
-      .bindPopup("<b>"+row["Full Name"]+"</b><br>"+row.Address);
+      })
+      .addTo(map)
+      .bindPopup(
+        `<b>${row["Full Name"]}</b><br>${row.Address}`
+      );
+
     });
 
-    if(count){
+    if(count>0){
+
       map.fitBounds(bounds,{padding:[40,40]});
+
       document.getElementById("status").innerHTML =
-        "Territory "+territoryNumber+" • "+count+" houses";
+        `Territory ${territoryNumber} • ${count} houses`;
+
     }else{
+
       document.getElementById("status").innerHTML =
-        "No houses found for "+territoryID;
+        territoryID
+        ? `No houses found for ${territoryID}`
+        : "Showing all houses";
+
     }
+
   },
+
   error:function(err){
-    document.getElementById("status").innerHTML="CSV failed";
+
     console.error(err);
+
+    document.getElementById("status").innerHTML =
+      "Failed to load Google Sheet.";
+
   }
+
 });
 </script>
 
