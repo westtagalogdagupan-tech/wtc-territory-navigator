@@ -1,104 +1,82 @@
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WTC Territory Navigator</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+html,body{
+  margin:0;
+  height:100%;
+}
+#map{
+  width:100%;
+  height:100%;
+}
+#banner{
+  position:absolute;
+  top:12px;
+  left:50%;
+  transform:translateX(-50%);
+  background:white;
+  padding:8px 14px;
+  border-radius:12px;
+  font-family:Arial,sans-serif;
+  font-weight:bold;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);
+  z-index:1000;
+}
+</style>
+</head>
+
+<body>
+
+<div id="banner">Loading...</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-const map = L.map("map").setView([16.265852,120.409395],17);
+window.onload = function(){
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  attribution:"© OpenStreetMap"
-}).addTo(map);
+  const map = L.map("map").setView([16.265852,120.409395],16);
 
-// Territory from AppSheet
-const params = new URLSearchParams(window.location.search);
-const territory = params.get("territory") || "";
+  L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      attribution:"© OpenStreetMap"
+    }
+  ).addTo(map);
 
-document.getElementById("banner").innerHTML =
-  territory ? "📍 "+territory : "📍 All Territories";
+  const territory =
+    new URLSearchParams(window.location.search).get("territory") || "ALL";
 
-// Live GPS
-let myMarker;
+  document.getElementById("banner").textContent = "📍 " + territory;
 
-navigator.geolocation.watchPosition(pos=>{
-  const lat = pos.coords.latitude;
-  const lng = pos.coords.longitude;
+  let me = null;
 
-  if(myMarker){
-    myMarker.setLatLng([lat,lng]);
-  }else{
-    myMarker = L.circleMarker([lat,lng],{
-      radius:8,
-      color:"#2563EB",
-      fillColor:"#2563EB",
-      fillOpacity:1
-    }).addTo(map);
-  }
+  navigator.geolocation.watchPosition(function(pos){
 
-}, console.error,{
-  enableHighAccuracy:true,
-  maximumAge:0,
-  timeout:10000
-});
+      const p=[pos.coords.latitude,pos.coords.longitude];
 
-// Google Sheet (GViz)
-const url =
-"https://docs.google.com/spreadsheets/d/1x9HJWqqfTt7LG1mzQjX8tlqta4NJDtW4_rxUsO_qVs0/gviz/tq?tqx=out:json&gid=150380614";
-
-fetch(url)
-.then(r=>r.text())
-.then(txt=>{
-
-  const json = JSON.parse(txt.substr(47).slice(0,-2));
-  const cols = json.table.cols.map(c=>c.label);
-
-  const nameIndex =
-    cols.findIndex(c=>/full.?name/i.test(c));
-
-  const addressIndex =
-    cols.findIndex(c=>/address/i.test(c));
-
-  const coordIndex =
-    cols.findIndex(c=>/coordinate/i.test(c));
-
-  const territoryIndex =
-    cols.findIndex(c=>/territory.?id/i.test(c));
-
-  const bounds=[];
-
-  json.table.rows.forEach(r=>{
-
-    const cells=r.c.map(x=>x?x.v:"");
-
-    if(territory && territoryIndex>=0 && cells[territoryIndex]!=territory)
-      return;
-
-    const coord=cells[coordIndex];
-
-    if(!coord) return;
-
-    const parts=coord.toString().split(",");
-
-    if(parts.length<2) return;
-
-    const lat=parseFloat(parts[0]);
-    const lng=parseFloat(parts[1]);
-
-    if(isNaN(lat)||isNaN(lng)) return;
-
-    bounds.push([lat,lng]);
-
-    L.marker([lat,lng])
-      .addTo(map)
-      .bindPopup(
-        "<b>"+(cells[nameIndex]||"No Name")+
-        "</b><br>"+(cells[addressIndex]||"")
-      );
+      if(me){
+        me.setLatLng(p);
+      }else{
+        me=L.circleMarker(p,{
+          radius:8,
+          color:"#2563EB",
+          fillColor:"#2563EB",
+          fillOpacity:1
+        }).addTo(map);
+      }
 
   });
 
-  if(bounds.length){
-    map.fitBounds(bounds,{padding:[40,40]});
-  }
-
-})
-.catch(console.error);
-
+};
 </script>
+
+</body>
+</html>
