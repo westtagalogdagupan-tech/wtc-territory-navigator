@@ -3,16 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>WTC Territory Navigator</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html,body,#map{
-height:100%;
-margin:0;
-}
+html,body,#map{height:100%;margin:0}
 .info{
 position:absolute;
 top:12px;
@@ -22,41 +20,33 @@ background:white;
 padding:10px 14px;
 border-radius:10px;
 font-family:Arial,sans-serif;
-font-size:16px;
 box-shadow:0 2px 8px rgba(0,0,0,.25);
 }
 </style>
 </head>
-
 <body>
 
 <div id="map"></div>
 <div class="info" id="status">Loading territory...</div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 <script>
 
 const params=new URLSearchParams(location.search);
 const territoryNumber=params.get("territory");
-
 const territoryID=territoryNumber
-? "T"+territoryNumber.toString().padStart(3,"0")
+? "T"+territoryNumber.padStart(3,"0")
 : null;
 
-const map=L.map("map").setView([16.04,120.33],15);
+const map=L.map("map").setView([16.04,120.33],14);
 
 L.tileLayer(
 "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-{
-attribution:"© OpenStreetMap"
-}
+{attribution:"© OpenStreetMap"}
 ).addTo(map);
 
 let myMarker;
 
-navigator.geolocation.watchPosition(function(pos){
-
+navigator.geolocation.watchPosition(pos=>{
 const lat=pos.coords.latitude;
 const lng=pos.coords.longitude;
 
@@ -70,46 +60,35 @@ fillColor:"#2563EB",
 fillOpacity:1
 }).addTo(map);
 }
-
-},{},{
-
-enableHighAccuracy:true,
-maximumAge:0
-
+},{
+enableHighAccuracy:true
 });
 
 const csvURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
-fetch(csvURL)
-.then(r=>r.text())
-.then(text=>{
-
-const rows=text.trim().split("\n").map(r=>r.split(","));
-
-const header=rows.shift();
-
-const latIndex=header.indexOf("Coordinates");
-const territoryIndex=header.indexOf("TerritoryID");
-const nameIndex=header.indexOf("Full Name");
-const addressIndex=header.indexOf("Address");
+Papa.parse(csvURL,{
+download:true,
+header:true,
+skipEmptyLines:true,
+complete:function(result){
 
 let bounds=[];
+let count=0;
 
-rows.forEach(r=>{
+result.data.forEach(row=>{
 
-if(r[territoryIndex]!==territoryID)return;
+if(territoryID && row.TerritoryID!==territoryID)return;
 
-const coord=r[latIndex];
+const coord=(row.Coordinates||"").split(",");
 
-if(!coord)return;
+if(coord.length!==2)return;
 
-const p=coord.split(",");
+const lat=parseFloat(coord[0]);
+const lng=parseFloat(coord[1]);
 
-if(p.length!==2)return;
+if(isNaN(lat)||isNaN(lng))return;
 
-const lat=parseFloat(p[0]);
-const lng=parseFloat(p[1]);
-
+count++;
 bounds.push([lat,lng]);
 
 L.circleMarker([lat,lng],{
@@ -119,28 +98,32 @@ fillColor:"#DC2626",
 fillOpacity:1
 })
 .addTo(map)
-.bindPopup(
-"<b>"+r[nameIndex]+"</b><br>"+r[addressIndex]
-);
+.bindPopup("<b>"+row["Full Name"]+"</b><br>"+row.Address);
 
 });
 
-if(bounds.length){
+if(count){
 
 map.fitBounds(bounds,{padding:[40,40]});
-
 document.getElementById("status").innerHTML=
-"Territory "+territoryNumber+
-" • "+bounds.length+" houses";
+territoryID
+? "Territory "+territoryNumber+" • "+count+" houses"
+: "All houses • "+count;
 
 }else{
 
 document.getElementById("status").innerHTML=
-"No houses found for Territory "+territoryNumber+
-" ("+territoryID+")";
+territoryID
+? "No houses found for Territory "+territoryNumber
+: "No houses found";
 
 }
 
+},
+error:function(err){
+document.getElementById("status").innerHTML="CSV Error";
+console.error(err);
+}
 });
 
 </script>
