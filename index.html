@@ -10,7 +10,7 @@
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html,body,#map{height:100%;margin:0}
+html,body,#map{height:100%;margin:0;}
 .info{
 position:absolute;
 top:12px;
@@ -30,102 +30,97 @@ box-shadow:0 2px 8px rgba(0,0,0,.25);
 <div class="info" id="status">Loading territory...</div>
 
 <script>
+const params = new URLSearchParams(window.location.search);
+const territoryNumber = params.get("territory");
+const territoryID = territoryNumber ? "T" + territoryNumber.padStart(3,"0") : null;
 
-const params=new URLSearchParams(location.search);
-const territoryNumber=params.get("territory");
-const territoryID=territoryNumber
-? "T"+territoryNumber.padStart(3,"0")
-: null;
+const map = L.map("map").setView([16.04,120.33],14);
 
-const map=L.map("map").setView([16.04,120.33],14);
-
-L.tileLayer(
-"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-{attribution:"© OpenStreetMap"}
-).addTo(map);
-
-let myMarker;
-
-navigator.geolocation.watchPosition(pos=>{
-const lat=pos.coords.latitude;
-const lng=pos.coords.longitude;
-
-if(myMarker){
-myMarker.setLatLng([lat,lng]);
-}else{
-myMarker=L.circleMarker([lat,lng],{
-radius:8,
-color:"#2563EB",
-fillColor:"#2563EB",
-fillOpacity:1
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  attribution:"© OpenStreetMap"
 }).addTo(map);
-}
-},{
-enableHighAccuracy:true
-});
 
-const csvURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
+// ✅ Fixed geolocation
+let myMarker = null;
+
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(
+    function(pos){
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      if(myMarker){
+        myMarker.setLatLng([lat,lng]);
+      }else{
+        myMarker = L.circleMarker([lat,lng],{
+          radius:8,
+          color:"#2563EB",
+          fillColor:"#2563EB",
+          fillOpacity:1
+        }).addTo(map);
+      }
+    },
+    function(err){
+      console.log("Location unavailable", err);
+    },
+    {
+      enableHighAccuracy:true,
+      maximumAge:0
+    }
+  );
+}
+
+const csvURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
 Papa.parse(csvURL,{
-download:true,
-header:true,
-skipEmptyLines:true,
-complete:function(result){
+  download:true,
+  header:true,
+  skipEmptyLines:true,
+  complete:function(result){
 
-let bounds=[];
-let count=0;
+    console.log("Territory:", territoryID);
+    console.log("Rows:", result.data.length);
 
-result.data.forEach(row=>{
+    let bounds=[];
+    let count=0;
 
-if(territoryID && row.TerritoryID!==territoryID)return;
+    result.data.forEach(row=>{
 
-const coord=(row.Coordinates||"").split(",");
+      if(territoryID && row.TerritoryID.trim()!==territoryID) return;
 
-if(coord.length!==2)return;
+      const coord=(row.Coordinates||"").split(",");
+      if(coord.length!==2) return;
 
-const lat=parseFloat(coord[0]);
-const lng=parseFloat(coord[1]);
+      const lat=parseFloat(coord[0]);
+      const lng=parseFloat(coord[1]);
+      if(isNaN(lat)||isNaN(lng)) return;
 
-if(isNaN(lat)||isNaN(lng))return;
+      count++;
+      bounds.push([lat,lng]);
 
-count++;
-bounds.push([lat,lng]);
+      L.circleMarker([lat,lng],{
+        radius:5,
+        color:"#DC2626",
+        fillColor:"#DC2626",
+        fillOpacity:1
+      }).addTo(map)
+      .bindPopup("<b>"+row["Full Name"]+"</b><br>"+row.Address);
+    });
 
-L.circleMarker([lat,lng],{
-radius:5,
-color:"#DC2626",
-fillColor:"#DC2626",
-fillOpacity:1
-})
-.addTo(map)
-.bindPopup("<b>"+row["Full Name"]+"</b><br>"+row.Address);
-
+    if(count){
+      map.fitBounds(bounds,{padding:[40,40]});
+      document.getElementById("status").innerHTML =
+        "Territory "+territoryNumber+" • "+count+" houses";
+    }else{
+      document.getElementById("status").innerHTML =
+        "No houses found for "+territoryID;
+    }
+  },
+  error:function(err){
+    document.getElementById("status").innerHTML="CSV failed";
+    console.error(err);
+  }
 });
-
-if(count){
-
-map.fitBounds(bounds,{padding:[40,40]});
-document.getElementById("status").innerHTML=
-territoryID
-? "Territory "+territoryNumber+" • "+count+" houses"
-: "All houses • "+count;
-
-}else{
-
-document.getElementById("status").innerHTML=
-territoryID
-? "No houses found for Territory "+territoryNumber
-: "No houses found";
-
-}
-
-},
-error:function(err){
-document.getElementById("status").innerHTML="CSV Error";
-console.error(err);
-}
-});
-
 </script>
 
 </body>
