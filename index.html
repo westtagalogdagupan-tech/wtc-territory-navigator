@@ -23,7 +23,7 @@ html,body,#map{
     padding:10px 16px;
     border-radius:12px;
     box-shadow:0 2px 10px rgba(0,0,0,.2);
-    font-family:Arial,Helvetica,sans-serif;
+    font-family:Arial,sans-serif;
     font-weight:bold;
     z-index:1000;
 }
@@ -33,41 +33,31 @@ html,body,#map{
 
 <body>
 
-<div id="banner">Loading Territory...</div>
+<div id="banner">Loading...</div>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-// Create map
-const map=L.map('map').setView([16.265852,120.409395],17);
+const map=L.map("map").setView([16.265852,120.409395],17);
 
-// OpenStreetMap tiles
 L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 {
-attribution:'© OpenStreetMap'
+attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-
-// ---------------------------
-// Read Territory from AppSheet
-// ---------------------------
+// ---------- Territory from AppSheet ----------
 
 const params=new URLSearchParams(window.location.search);
-const territory=params.get("territory") || "Unknown Territory";
+const territory=params.get("territory") || "";
 
 document.getElementById("banner").innerHTML=
-"📍 "+territory;
+territory ? "📍 "+territory : "📍 All Territories";
 
-console.log("Selected Territory:",territory);
-
-
-// ---------------------------
-// Live GPS
-// ---------------------------
+// ---------- Live GPS ----------
 
 let myMarker=null;
 
@@ -84,27 +74,21 @@ myMarker.setLatLng([lat,lng]);
 
 }else{
 
-myMarker=L.circleMarker(
-[lat,lng],
-{
+myMarker=L.circleMarker([lat,lng],{
 radius:9,
 color:"#2563EB",
 fillColor:"#2563EB",
 fillOpacity:1
 }).addTo(map);
 
-myMarker.bindPopup("📍 Your Current Location");
+myMarker.bindPopup("📍 Your Location");
 
 }
-
-map.setView([lat,lng]);
 
 },
 
 function(err){
-
-alert("Please allow location access.");
-
+console.log(err);
 },
 
 {
@@ -114,6 +98,65 @@ timeout:10000
 }
 
 );
+
+// ---------- Load People from Google Sheets ----------
+
+const csvUrl="https://docs.google.com/spreadsheets/d/1x9HJWqqfTt7LG1mzQjX8tlqta4NJDtW4_rxUsO_qVs0/export?format=csv&gid=150380614";
+
+fetch(csvUrl)
+.then(r=>r.text())
+.then(text=>{
+
+const rows=text.trim().split("\n").map(r=>r.split(","));
+
+const headers=rows[0];
+
+const nameCol=headers.indexOf("Full Name");
+const addressCol=headers.indexOf("Address");
+const coordCol=headers.indexOf("Coordinates");
+const territoryCol=headers.indexOf("TerritoryID");
+
+const bounds=[];
+
+rows.slice(1).forEach(row=>{
+
+if(territory && row[territoryCol]!==territory) return;
+
+const coord=row[coordCol];
+
+if(!coord) return;
+
+const parts=coord.split(",");
+
+if(parts.length!==2) return;
+
+const lat=parseFloat(parts[0]);
+const lng=parseFloat(parts[1]);
+
+if(isNaN(lat)||isNaN(lng)) return;
+
+bounds.push([lat,lng]);
+
+L.marker([lat,lng])
+.addTo(map)
+.bindPopup(
+"<b>"+row[nameCol]+"</b><br>"+row[addressCol]
+);
+
+});
+
+if(bounds.length){
+
+map.fitBounds(bounds,{padding:[40,40]});
+
+}
+
+})
+.catch(err=>{
+
+console.error(err);
+
+});
 
 </script>
 
