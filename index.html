@@ -336,7 +336,7 @@ icon:createIcon(count)
 }).addTo(map);
 
 const appLink=
-`appsheet://www.appsheet.com/start/${APP_ID}#control=People_Detail&row=${row.PeopleID}`;
+`https://www.appsheet.com/start/${APP_ID}#control=People_Detail&row=${row.PeopleID}`;
 
 marker.bindPopup(`
 <b>${count}. ${row["Full Name"]}</b><br>
@@ -350,7 +350,7 @@ onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},
 <button class="popup-btn gray"
 onclick="
 markVisited('${row.PeopleID}');
-window.open('${appLink}','_top');
+window.location.assign('${appLink}');
 ">
 ✅ Arrived
 </button>
