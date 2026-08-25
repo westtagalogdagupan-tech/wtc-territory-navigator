@@ -33,6 +33,7 @@ border-radius:12px;
 box-shadow:0 2px 10px rgba(0,0,0,.25);
 font-weight:bold;
 text-align:center;
+min-width:220px;
 }
 
 .fab{
@@ -68,36 +69,37 @@ border:2px solid white;
 box-shadow:0 2px 6px rgba(0,0,0,.35);
 }
 
-.visited{
-background:#9CA3AF;
-}
-
 .target{
 background:#16A34A;
 }
 
 .popup-btn{
 margin-top:8px;
-padding:8px 10px;
+padding:8px 12px;
 border:none;
 border-radius:8px;
 background:#2563EB;
 color:white;
 cursor:pointer;
+width:100%;
+font-size:14px;
 }
 
 .popup-btn.gray{
-background:#6B7280;
+background:#4B5563;
 }
 
 </style>
+
 </head>
 
 <body>
 
 <div id="map"></div>
 
-<div id="status">Loading territory...</div>
+<div id="status">
+Loading territory...
+</div>
 
 <button id="territoryBtn" class="fab">🏠</button>
 <button id="nextBtn" class="fab">➡️</button>
@@ -109,6 +111,8 @@ background:#6B7280;
 
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
+const APPSHEET_APP="b471d87c-5f27-4245-9704-8c86379428fc";
+
 const params=new URLSearchParams(location.search);
 
 const territoryNumber=params.get("territory");
@@ -116,14 +120,6 @@ const territoryNumber=params.get("territory");
 const territoryID=territoryNumber
 ?`T${territoryNumber.padStart(3,"0")}`
 :null;
-
-// ================= STORAGE =================
-
-const STORAGE_KEY=`visited_${territoryID||"ALL"}`;
-
-const visited=new Set(
-JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")
-);
 
 // ================= MAP =================
 
@@ -198,11 +194,14 @@ accuracyCircle.setRadius(e.accuracy);
 
 }
 
-if(follow)
+if(follow){
+
 map.flyTo(e.latlng,18,{
 animate:true,
 duration:.5
 });
+
+}
 
 highlightNearest();
 
@@ -214,7 +213,7 @@ const houses=[];
 let current=0;
 let territoryBounds;
 
-// Distance
+// Distance helper
 
 function distance(a,b,c,d){
 
@@ -233,15 +232,16 @@ return R*2*Math.atan2(Math.sqrt(aa),Math.sqrt(1-aa));
 
 }
 
-// Marker
+// Marker icon
 
-function createIcon(num,state){
+function createIcon(num,state=""){
 
 return L.divIcon({
 
 className:"",
 
-html:`<div class="house ${state}">
+html:`
+<div class="house ${state}">
 ${num}
 </div>`,
 
@@ -252,18 +252,7 @@ iconAnchor:[14,14]
 
 }
 
-// Save
-
-function saveVisited(){
-
-localStorage.setItem(
-STORAGE_KEY,
-JSON.stringify([...visited])
-);
-
-}
-
-// Highlight nearest
+// Highlight nearest house
 
 function highlightNearest(){
 
@@ -273,8 +262,6 @@ let best=-1;
 let bestDist=Infinity;
 
 houses.forEach((h,i)=>{
-
-if(visited.has(h.id))return;
 
 const d=distance(
 lastLocation.lat,
@@ -294,16 +281,11 @@ bestDist=d;
 
 if(best==-1)return;
 
-houses.forEach(h=>{
-
-const state=visited.has(h.id)
-?"visited":"";
-
+houses.forEach(h=>
 h.marker.setIcon(
-createIcon(h.number,state)
+createIcon(h.number)
+)
 );
-
-});
 
 const h=houses[best];
 
@@ -312,8 +294,6 @@ createIcon(h.number,"target")
 );
 
 current=best;
-
-h.marker.openPopup();
 
 }
 
@@ -332,35 +312,59 @@ let bounds=[];
 
 result.data.forEach(row=>{
 
-const id=String(row.TerritoryID)
+const rowID=String(row.TerritoryID||"")
 .trim()
 .toUpperCase();
 
-if(territoryID&&id!==territoryID)return;
+if(territoryID&&rowID!==territoryID)return;
 
-const p=row.Coordinates
+const coord=String(row.Coordinates||"")
 .replace(/"/g,"")
-.split(",");
+.trim();
 
-if(p.length!=2)return;
+const p=coord.split(",");
+
+if(p.length!==2)return;
 
 const lat=parseFloat(p[0]);
 const lng=parseFloat(p[1]);
+
+if(isNaN(lat)||isNaN(lng))return;
 
 count++;
 
 const marker=L.marker(
 [lat,lng],
 {
-icon:createIcon(
-count,
-visited.has(row.PeopleID)
-?"visited":""
-)
+icon:createIcon(count)
 }
 ).addTo(map);
 
-const house={
+// AppSheet deep link
+
+const appSheetUrl=
+`https://www.appsheet.com/start/${APPSHEET_APP}#control=People_Detail&row=${row.PeopleID}`;
+
+marker.bindPopup(`
+<b>${count}. ${row["Full Name"]||"House"}</b><br>
+${row.Address||""}<br><br>
+
+<button class="popup-btn"
+onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}','_blank')">
+
+🧭 Navigate
+
+</button>
+
+<button class="popup-btn gray"
+onclick="window.location.href='${appSheetUrl}'">
+
+✅ Arrived
+
+</button>
+`);
+
+houses.push({
 
 id:row.PeopleID,
 number:count,
@@ -368,35 +372,7 @@ lat,
 lng,
 marker
 
-};
-
-houses.push(house);
-
-marker.bindPopup(()=>`
-
-<b>${count}. ${row["Full Name"]}</b><br>
-
-${row.Address}<br><br>
-
-<button class="popup-btn"
-
-onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}')">
-
-Navigate
-
-</button>
-
-<br>
-
-<button class="popup-btn gray"
-
-onclick="visitHouse('${row.PeopleID}')">
-
-${visited.has(row.PeopleID)?"Visited ✓":"Mark Visited"}
-
-</button>
-
-`);
+});
 
 bounds.push([lat,lng]);
 
@@ -408,48 +384,14 @@ map.fitBounds(territoryBounds,{
 padding:[40,40]
 });
 
-updateStatus();
+document.getElementById("status").innerHTML=
+territoryNumber
+?`Territory ${territoryNumber} • ${count} houses`
+:`All Territories • ${count} houses`;
 
 }
 
 });
-
-// ================= VISITED =================
-
-window.visitHouse=function(id){
-
-visited.add(id);
-
-saveVisited();
-
-houses.forEach(h=>{
-
-if(h.id==id)
-h.marker.setIcon(
-createIcon(h.number,"visited")
-);
-
-});
-
-highlightNearest();
-
-updateStatus();
-
-};
-
-// ================= STATUS =================
-
-function updateStatus(){
-
-document.getElementById("status").innerHTML=`
-
-Territory ${territoryNumber||"All"}<br>
-
-${visited.size}/${houses.length} Visited
-
-`;
-
-}
 
 // ================= BUTTONS =================
 
@@ -467,11 +409,27 @@ padding:[40,40]
 
 document.getElementById("nextBtn").onclick=()=>{
 
-highlightNearest();
+if(!houses.length)return;
+
+current++;
+
+if(current>=houses.length)
+current=0;
+
+const h=houses[current];
+
+follow=false;
+
+followBtn.style.display="block";
+
+map.flyTo([h.lat,h.lng],19);
+
+h.marker.openPopup();
 
 };
 
 </script>
 
 </body>
+
 </html>
