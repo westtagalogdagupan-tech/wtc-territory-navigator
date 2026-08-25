@@ -2,19 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport"
-content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
 <title>WTC Territory Navigator</title>
 
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-
 html,body,#map{
 height:100%;
 margin:0;
@@ -23,31 +19,30 @@ font-family:Arial,sans-serif;
 
 #status{
 position:absolute;
-top:12px;
+top:14px;
 left:50%;
 transform:translateX(-50%);
 z-index:1000;
 background:white;
-padding:10px 16px;
-border-radius:12px;
-box-shadow:0 2px 10px rgba(0,0,0,.25);
+padding:12px 18px;
+border-radius:14px;
+box-shadow:0 3px 12px rgba(0,0,0,.25);
 font-weight:bold;
 text-align:center;
-min-width:220px;
 }
 
 .fab{
 position:absolute;
-right:15px;
-width:56px;
-height:56px;
+right:16px;
+width:58px;
+height:58px;
 border:none;
 border-radius:50%;
 background:#2563EB;
 color:white;
-font-size:22px;
-box-shadow:0 4px 12px rgba(0,0,0,.35);
+font-size:24px;
 cursor:pointer;
+box-shadow:0 4px 12px rgba(0,0,0,.35);
 z-index:1000;
 }
 
@@ -56,17 +51,17 @@ z-index:1000;
 #territoryBtn{bottom:230px;}
 
 .house{
-width:28px;
-height:28px;
-background:#DC2626;
-color:white;
+width:30px;
+height:30px;
 border-radius:50%;
 display:flex;
 align-items:center;
 justify-content:center;
+color:white;
 font-weight:bold;
 border:2px solid white;
-box-shadow:0 2px 6px rgba(0,0,0,.35);
+box-shadow:0 2px 8px rgba(0,0,0,.35);
+background:#DC2626;
 }
 
 .target{
@@ -75,7 +70,7 @@ background:#16A34A;
 
 .popup-btn{
 margin-top:8px;
-padding:8px 12px;
+padding:9px 12px;
 border:none;
 border-radius:8px;
 background:#2563EB;
@@ -88,18 +83,14 @@ font-size:14px;
 .popup-btn.gray{
 background:#4B5563;
 }
-
 </style>
-
 </head>
 
 <body>
 
 <div id="map"></div>
 
-<div id="status">
-Loading territory...
-</div>
+<div id="status">Loading territory...</div>
 
 <button id="territoryBtn" class="fab">🏠</button>
 <button id="nextBtn" class="fab">➡️</button>
@@ -107,21 +98,13 @@ Loading territory...
 
 <script>
 
-// ================= CONFIG =================
-
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
-const APPSHEET_APP="b471d87c-5f27-4245-9704-8c86379428fc";
+const APP_ID="b471d87c-5f27-4245-9704-8c86379428fc";
 
 const params=new URLSearchParams(location.search);
-
-const territoryNumber=params.get("territory");
-
-const territoryID=territoryNumber
-?`T${territoryNumber.padStart(3,"0")}`
-:null;
-
-// ================= MAP =================
+const territory=params.get("territory");
+const territoryID=territory?`T${territory.padStart(3,"0")}`:null;
 
 const map=L.map("map").setView([16.043,120.334],14);
 
@@ -133,30 +116,25 @@ attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-// ================= GPS =================
-
 let userMarker;
 let accuracyCircle;
-let follow=true;
 let lastLocation;
+let follow=true;
+let houses=[];
+let current=0;
+let bounds;
 
 const followBtn=document.getElementById("followBtn");
 
 map.on("dragstart",()=>{
-
 follow=false;
 followBtn.style.display="block";
-
 });
 
 followBtn.onclick=()=>{
-
 follow=true;
 followBtn.style.display="none";
-
-if(lastLocation)
-map.flyTo(lastLocation,18);
-
+if(lastLocation) map.flyTo(lastLocation,18);
 };
 
 map.locate({
@@ -181,7 +159,6 @@ fillOpacity:1
 accuracyCircle=L.circle(e.latlng,{
 radius:e.accuracy,
 color:"#2563EB",
-fillColor:"#2563EB",
 fillOpacity:.12,
 weight:1
 }).addTo(map);
@@ -195,25 +172,21 @@ accuracyCircle.setRadius(e.accuracy);
 }
 
 if(follow){
-
-map.flyTo(e.latlng,18,{
-animate:true,
-duration:.5
-});
-
+map.flyTo(e.latlng,18,{duration:.5});
 }
 
 highlightNearest();
 
 });
 
-// ================= HOUSES =================
-
-const houses=[];
-let current=0;
-let territoryBounds;
-
-// Distance helper
+function icon(number,state=""){
+return L.divIcon({
+className:"",
+html:`<div class="house ${state}">${number}</div>`,
+iconSize:[30,30],
+iconAnchor:[15,15]
+});
+}
 
 function distance(a,b,c,d){
 
@@ -222,43 +195,21 @@ const R=6371000;
 const dLat=(c-a)*Math.PI/180;
 const dLon=(d-b)*Math.PI/180;
 
-const aa=
+const x=
 Math.sin(dLat/2)**2+
 Math.cos(a*Math.PI/180)*
 Math.cos(c*Math.PI/180)*
 Math.sin(dLon/2)**2;
 
-return R*2*Math.atan2(Math.sqrt(aa),Math.sqrt(1-aa));
+return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 
 }
-
-// Marker icon
-
-function createIcon(num,state=""){
-
-return L.divIcon({
-
-className:"",
-
-html:`
-<div class="house ${state}">
-${num}
-</div>`,
-
-iconSize:[28,28],
-iconAnchor:[14,14]
-
-});
-
-}
-
-// Highlight nearest house
 
 function highlightNearest(){
 
 if(!lastLocation||!houses.length)return;
 
-let best=-1;
+let best=0;
 let bestDist=Infinity;
 
 houses.forEach((h,i)=>{
@@ -271,36 +222,21 @@ h.lng
 );
 
 if(d<bestDist){
-
 best=i;
 bestDist=d;
-
 }
 
 });
 
-if(best==-1)return;
+houses.forEach(h=>h.marker.setIcon(icon(h.number)));
 
-houses.forEach(h=>
-h.marker.setIcon(
-createIcon(h.number)
-)
-);
-
-const h=houses[best];
-
-h.marker.setIcon(
-createIcon(h.number,"target")
-);
+houses[best].marker.setIcon(icon(houses[best].number,"target"));
 
 current=best;
 
 }
 
-// ================= LOAD PEOPLE =================
-
 Papa.parse(CSV_URL,{
-
 download:true,
 header:true,
 skipEmptyLines:true,
@@ -308,19 +244,15 @@ skipEmptyLines:true,
 complete:function(result){
 
 let count=0;
-let bounds=[];
+let list=[];
 
 result.data.forEach(row=>{
 
-const rowID=String(row.TerritoryID||"")
-.trim()
-.toUpperCase();
+const tid=String(row.TerritoryID||"").trim().toUpperCase();
 
-if(territoryID&&rowID!==territoryID)return;
+if(territoryID&&tid!==territoryID)return;
 
-const coord=String(row.Coordinates||"")
-.replace(/"/g,"")
-.trim();
+const coord=String(row.Coordinates||"").replace(/"/g,"").trim();
 
 const p=coord.split(",");
 
@@ -333,93 +265,67 @@ if(isNaN(lat)||isNaN(lng))return;
 
 count++;
 
-const marker=L.marker(
-[lat,lng],
-{
-icon:createIcon(count)
-}
-).addTo(map);
+const marker=L.marker([lat,lng],{
+icon:icon(count)
+}).addTo(map);
 
-// AppSheet deep link
-
-const appSheetUrl=
-`https://www.appsheet.com/start/${APPSHEET_APP}#control=People_Detail&row=${row.PeopleID}`;
+const appLink=
+`https://www.appsheet.com/start/${APP_ID}#control=People_Detail&row=${row.PeopleID}`;
 
 marker.bindPopup(`
-<b>${count}. ${row["Full Name"]||"House"}</b><br>
-${row.Address||""}<br><br>
+<b>${count}. ${row["Full Name"]}</b><br>
+${row.Address}<br>
 
 <button class="popup-btn"
 onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}','_blank')">
-
 🧭 Navigate
-
 </button>
 
 <button class="popup-btn gray"
-onclick="window.location.href='${appSheetUrl}'">
-
+onclick="window.location.href='${appLink}'">
 ✅ Arrived
-
 </button>
 `);
 
 houses.push({
-
-id:row.PeopleID,
 number:count,
 lat,
 lng,
 marker
+});
+
+list.push([lat,lng]);
 
 });
 
-bounds.push([lat,lng]);
+bounds=L.latLngBounds(list);
 
-});
-
-territoryBounds=L.latLngBounds(bounds);
-
-map.fitBounds(territoryBounds,{
-padding:[40,40]
-});
+map.fitBounds(bounds,{padding:[40,40]});
 
 document.getElementById("status").innerHTML=
-territoryNumber
-?`Territory ${territoryNumber} • ${count} houses`
-:`All Territories • ${count} houses`;
+territory
+?`Territory ${territory}<br>${count} houses`
+:`All Territories<br>${count} houses`;
 
 }
 
 });
 
-// ================= BUTTONS =================
-
 document.getElementById("territoryBtn").onclick=()=>{
-
 follow=false;
-
 followBtn.style.display="block";
-
-map.fitBounds(territoryBounds,{
-padding:[40,40]
-});
-
+if(bounds) map.fitBounds(bounds,{padding:[40,40]});
 };
 
 document.getElementById("nextBtn").onclick=()=>{
 
 if(!houses.length)return;
 
-current++;
-
-if(current>=houses.length)
-current=0;
+current=(current+1)%houses.length;
 
 const h=houses[current];
 
 follow=false;
-
 followBtn.style.display="block";
 
 map.flyTo([h.lat,h.lng],19);
@@ -431,5 +337,4 @@ h.marker.openPopup();
 </script>
 
 </body>
-
 </html>
