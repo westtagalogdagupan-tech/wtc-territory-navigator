@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport"
+content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 
 <title>WTC Territory Navigator</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
+
 html,body,#map{
 height:100%;
 margin:0;
@@ -20,20 +24,15 @@ font-family:Arial,sans-serif;
 #status{
 position:absolute;
 top:12px;
-left:55px;
+left:50%;
+transform:translateX(-50%);
 z-index:1000;
 background:white;
-padding:10px 14px;
+padding:10px 16px;
 border-radius:12px;
 box-shadow:0 2px 10px rgba(0,0,0,.25);
 font-weight:bold;
-min-width:220px;
-}
-
-#debug{
-font-size:12px;
-color:#666;
-margin-top:4px;
+text-align:center;
 }
 
 .fab{
@@ -55,7 +54,7 @@ z-index:1000;
 #nextBtn{bottom:160px;}
 #territoryBtn{bottom:230px;}
 
-.house-marker{
+.house{
 width:28px;
 height:28px;
 background:#DC2626;
@@ -66,8 +65,31 @@ align-items:center;
 justify-content:center;
 font-weight:bold;
 border:2px solid white;
-box-shadow:0 2px 6px rgba(0,0,0,.4);
+box-shadow:0 2px 6px rgba(0,0,0,.35);
 }
+
+.visited{
+background:#9CA3AF;
+}
+
+.target{
+background:#16A34A;
+}
+
+.popup-btn{
+margin-top:8px;
+padding:8px 10px;
+border:none;
+border-radius:8px;
+background:#2563EB;
+color:white;
+cursor:pointer;
+}
+
+.popup-btn.gray{
+background:#6B7280;
+}
+
 </style>
 </head>
 
@@ -75,10 +97,7 @@ box-shadow:0 2px 6px rgba(0,0,0,.4);
 
 <div id="map"></div>
 
-<div id="status">
-Loading...
-<div id="debug"></div>
-</div>
+<div id="status">Loading territory...</div>
 
 <button id="territoryBtn" class="fab">🏠</button>
 <button id="nextBtn" class="fab">➡️</button>
@@ -86,25 +105,27 @@ Loading...
 
 <script>
 
-// ===================== CONFIG =====================
+// ================= CONFIG =================
 
-const CSV_URL =
-"https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
-// Read ?territory=1
-const params=new URLSearchParams(window.location.search);
+const params=new URLSearchParams(location.search);
+
 const territoryNumber=params.get("territory");
 
 const territoryID=territoryNumber
-? `T${String(territoryNumber).padStart(3,"0")}`
-: null;
+?`T${territoryNumber.padStart(3,"0")}`
+:null;
 
-document.getElementById("debug").innerHTML=
-territoryID
-? `Looking for ${territoryID}`
-: "Showing all territories";
+// ================= STORAGE =================
 
-// ===================== MAP =====================
+const STORAGE_KEY=`visited_${territoryID||"ALL"}`;
+
+const visited=new Set(
+JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")
+);
+
+// ================= MAP =================
 
 const map=L.map("map").setView([16.043,120.334],14);
 
@@ -116,24 +137,30 @@ attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-// ===================== USER LOCATION =====================
+// ================= GPS =================
 
-let userMarker=null;
-let accuracyCircle=null;
-let followMe=true;
-let lastLocation=null;
+let userMarker;
+let accuracyCircle;
+let follow=true;
+let lastLocation;
 
 const followBtn=document.getElementById("followBtn");
 
 map.on("dragstart",()=>{
-followMe=false;
+
+follow=false;
 followBtn.style.display="block";
+
 });
 
 followBtn.onclick=()=>{
-followMe=true;
+
+follow=true;
 followBtn.style.display="none";
-if(lastLocation) map.flyTo(lastLocation,18);
+
+if(lastLocation)
+map.flyTo(lastLocation,18);
+
 };
 
 map.locate({
@@ -171,64 +198,129 @@ accuracyCircle.setRadius(e.accuracy);
 
 }
 
-if(followMe){
+if(follow)
 map.flyTo(e.latlng,18,{
 animate:true,
 duration:.5
 });
-}
+
+highlightNearest();
 
 });
 
-// ===================== HOUSES =====================
+// ================= HOUSES =================
 
 const houses=[];
-let currentHouse=0;
-let territoryBounds=null;
+let current=0;
+let territoryBounds;
 
-function distance(lat1,lon1,lat2,lon2){
+// Distance
+
+function distance(a,b,c,d){
 
 const R=6371000;
 
-const dLat=(lat2-lat1)*Math.PI/180;
-const dLon=(lon2-lon1)*Math.PI/180;
+const dLat=(c-a)*Math.PI/180;
+const dLon=(d-b)*Math.PI/180;
 
-const a=
+const aa=
 Math.sin(dLat/2)**2+
-Math.cos(lat1*Math.PI/180)*
-Math.cos(lat2*Math.PI/180)*
+Math.cos(a*Math.PI/180)*
+Math.cos(c*Math.PI/180)*
 Math.sin(dLon/2)**2;
 
-return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+return R*2*Math.atan2(Math.sqrt(aa),Math.sqrt(1-aa));
 
 }
 
-function nearestHouse(lat,lng){
+// Marker
 
-let best=null;
+function createIcon(num,state){
+
+return L.divIcon({
+
+className:"",
+
+html:`<div class="house ${state}">
+${num}
+</div>`,
+
+iconSize:[28,28],
+iconAnchor:[14,14]
+
+});
+
+}
+
+// Save
+
+function saveVisited(){
+
+localStorage.setItem(
+STORAGE_KEY,
+JSON.stringify([...visited])
+);
+
+}
+
+// Highlight nearest
+
+function highlightNearest(){
+
+if(!lastLocation||!houses.length)return;
+
+let best=-1;
 let bestDist=Infinity;
 
 houses.forEach((h,i)=>{
 
-const d=distance(lat,lng,h.lat,h.lng);
+if(visited.has(h.id))return;
+
+const d=distance(
+lastLocation.lat,
+lastLocation.lng,
+h.lat,
+h.lng
+);
 
 if(d<bestDist){
 
-best=h;
+best=i;
 bestDist=d;
-currentHouse=i;
 
 }
 
 });
 
-return best;
+if(best==-1)return;
+
+houses.forEach(h=>{
+
+const state=visited.has(h.id)
+?"visited":"";
+
+h.marker.setIcon(
+createIcon(h.number,state)
+);
+
+});
+
+const h=houses[best];
+
+h.marker.setIcon(
+createIcon(h.number,"target")
+);
+
+current=best;
+
+h.marker.openPopup();
 
 }
 
-// ===================== LOAD PEOPLE =====================
+// ================= LOAD PEOPLE =================
 
 Papa.parse(CSV_URL,{
+
 download:true,
 header:true,
 skipEmptyLines:true,
@@ -237,67 +329,78 @@ complete:function(result){
 
 let count=0;
 let bounds=[];
-const foundIDs=new Set();
 
 result.data.forEach(row=>{
 
-const rowID=String(row.TerritoryID||"")
-.replace(/"/g,"")
+const id=String(row.TerritoryID)
 .trim()
 .toUpperCase();
 
-if(rowID) foundIDs.add(rowID);
+if(territoryID&&id!==territoryID)return;
 
-// STRICT FILTER
-if(territoryID && rowID!==territoryID.toUpperCase()) return;
-
-const coord=String(row.Coordinates||"")
+const p=row.Coordinates
 .replace(/"/g,"")
-.trim();
+.split(",");
 
-const parts=coord.split(",");
+if(p.length!=2)return;
 
-if(parts.length!==2) return;
-
-const lat=parseFloat(parts[0]);
-const lng=parseFloat(parts[1]);
-
-if(isNaN(lat)||isNaN(lng)) return;
+const lat=parseFloat(p[0]);
+const lng=parseFloat(p[1]);
 
 count++;
 
-const marker=L.marker([lat,lng],{
+const marker=L.marker(
+[lat,lng],
+{
+icon:createIcon(
+count,
+visited.has(row.PeopleID)
+?"visited":""
+)
+}
+).addTo(map);
 
-icon:L.divIcon({
+const house={
 
-className:"",
-html:`<div class="house-marker">${count}</div>`,
-iconSize:[28,28],
-iconAnchor:[14,14]
-
-})
-
-}).addTo(map);
-
-marker.bindPopup(`
-<b>${count}. ${row["Full Name"]||"House"}</b><br>
-${row.Address||""}<br><br>
-<button onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}')">
-Navigate
-</button>
-`);
-
-houses.push({
-marker,
+id:row.PeopleID,
+number:count,
 lat,
-lng
-});
+lng,
+marker
+
+};
+
+houses.push(house);
+
+marker.bindPopup(()=>`
+
+<b>${count}. ${row["Full Name"]}</b><br>
+
+${row.Address}<br><br>
+
+<button class="popup-btn"
+
+onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}')">
+
+Navigate
+
+</button>
+
+<br>
+
+<button class="popup-btn gray"
+
+onclick="visitHouse('${row.PeopleID}')">
+
+${visited.has(row.PeopleID)?"Visited ✓":"Mark Visited"}
+
+</button>
+
+`);
 
 bounds.push([lat,lng]);
 
 });
-
-if(bounds.length){
 
 territoryBounds=L.latLngBounds(bounds);
 
@@ -305,68 +408,70 @@ map.fitBounds(territoryBounds,{
 padding:[40,40]
 });
 
-document.getElementById("status").innerHTML=
-`${territoryID||"All"} • ${count} houses
-<div id="debug">Looking for ${territoryID||"ALL"}</div>`;
-
-}else{
-
-document.getElementById("status").innerHTML=
-`No houses found
-<div id="debug">Expected ${territoryID}<br>Found: ${Array.from(foundIDs).slice(0,10).join(", ")}</div>`;
-
-}
-
-},
-
-error:function(err){
-
-console.error(err);
-
-document.getElementById("status").innerHTML="Failed loading CSV";
+updateStatus();
 
 }
 
 });
 
-// ===================== BUTTONS =====================
+// ================= VISITED =================
+
+window.visitHouse=function(id){
+
+visited.add(id);
+
+saveVisited();
+
+houses.forEach(h=>{
+
+if(h.id==id)
+h.marker.setIcon(
+createIcon(h.number,"visited")
+);
+
+});
+
+highlightNearest();
+
+updateStatus();
+
+};
+
+// ================= STATUS =================
+
+function updateStatus(){
+
+document.getElementById("status").innerHTML=`
+
+Territory ${territoryNumber||"All"}<br>
+
+${visited.size}/${houses.length} Visited
+
+`;
+
+}
+
+// ================= BUTTONS =================
 
 document.getElementById("territoryBtn").onclick=()=>{
 
-if(territoryBounds){
+follow=false;
 
-followMe=false;
 followBtn.style.display="block";
 
 map.fitBounds(territoryBounds,{
 padding:[40,40]
 });
 
-}
-
 };
 
 document.getElementById("nextBtn").onclick=()=>{
 
-if(!houses.length) return;
-
-currentHouse++;
-
-if(currentHouse>=houses.length)
-currentHouse=0;
-
-const h=houses[currentHouse];
-
-followMe=false;
-followBtn.style.display="block";
-
-map.flyTo([h.lat,h.lng],19);
-
-h.marker.openPopup();
+highlightNearest();
 
 };
 
 </script>
 
 </body>
-</htm
+</html>
