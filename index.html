@@ -2,175 +2,273 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport"
+content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+
 <title>WTC Territory Navigator</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html, body {
-  margin: 0;
-  height: 100%;
+html,body,#map{
+height:100%;
+margin:0;
 }
 
-#map {
-  width: 100%;
-  height: 100%;
+#status{
+position:absolute;
+top:12px;
+left:55px;
+z-index:1000;
+background:white;
+padding:10px 14px;
+border-radius:12px;
+font-family:Arial,sans-serif;
+font-size:15px;
+box-shadow:0 2px 10px rgba(0,0,0,.25);
 }
 
-#status {
-  position: absolute;
-  top: 12px;
-  left: 55px;
-  z-index: 1000;
-  background: white;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-family: Arial, sans-serif;
-  font-size: 15px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+.follow-btn{
+position:absolute;
+right:15px;
+bottom:90px;
+z-index:1000;
+width:58px;
+height:58px;
+border:none;
+border-radius:50%;
+background:#2563EB;
+color:white;
+font-size:24px;
+cursor:pointer;
+box-shadow:0 4px 14px rgba(0,0,0,.35);
+display:none;
+}
+
+.follow-btn:active{
+transform:scale(.95);
 }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
-<div id="status">Loading territory...</div>
+
+<div id="status">
+Loading territory...
+</div>
+
+<button id="followBtn"
+class="follow-btn">
+📍
+</button>
 
 <script>
-// ----------------------------
-// CONFIG
-// ----------------------------
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
-// ----------------------------
-// GET TERRITORY FROM URL
-// ----------------------------
-const params = new URLSearchParams(window.location.search);
-const territoryNumber = params.get("territory");
-const territoryID = territoryNumber
-  ? "T" + territoryNumber.padStart(3,"0")
-  : null;
+// -------------------- CONFIG --------------------
 
-// ----------------------------
-// MAP
-// ----------------------------
-const map = L.map("map").setView([16.043,120.334],13);
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
+
+const params=new URLSearchParams(location.search);
+const territoryNumber=params.get("territory");
+const territoryID=territoryNumber
+? "T"+territoryNumber.padStart(3,"0")
+: null;
+
+// -------------------- MAP --------------------
+
+const map=L.map("map",{
+zoomControl:true
+}).setView([16.043,120.334],14);
 
 L.tileLayer(
-  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  {
-    attribution:"© OpenStreetMap"
-  }
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+{
+maxZoom:20,
+attribution:"© OpenStreetMap"
+}
 ).addTo(map);
 
-// ----------------------------
-// LIVE LOCATION (FIXED)
-// ----------------------------
-let myMarker = null;
+// -------------------- FOLLOW MODE --------------------
 
-if (navigator.geolocation) {
-  navigator.geolocation.watchPosition(
-    function(pos){
+let followMe=true;
+let userMarker=null;
+let accuracyCircle=null;
+let headingArrow=null;
+let lastLatLng=null;
 
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
+const followBtn=document.getElementById("followBtn");
 
-      if(myMarker){
-        myMarker.setLatLng([lat,lng]);
-      }else{
-        myMarker = L.circleMarker([lat,lng],{
-          radius:8,
-          color:"#2563EB",
-          fillColor:"#2563EB",
-          fillOpacity:1
-        }).addTo(map);
-      }
+map.on("dragstart",()=>{
+followMe=false;
+followBtn.style.display="block";
+});
 
-    },
-    function(err){
-      console.log("Location error:", err);
-    },
-    {
-      enableHighAccuracy:true,
-      maximumAge:0,
-      timeout:10000
-    }
-  );
+followBtn.onclick=()=>{
+followMe=true;
+followBtn.style.display="none";
+
+if(lastLatLng){
+map.flyTo(lastLatLng,18);
+}
+};
+
+// -------------------- LIVE LOCATION --------------------
+
+map.on("locationfound",function(e){
+
+lastLatLng=e.latlng;
+
+if(!userMarker){
+
+userMarker=L.circleMarker(e.latlng,{
+radius:8,
+color:"#2563EB",
+fillColor:"#2563EB",
+fillOpacity:1
+}).addTo(map);
+
+accuracyCircle=L.circle(e.latlng,{
+radius:e.accuracy,
+color:"#2563EB",
+fillColor:"#2563EB",
+fillOpacity:.10,
+weight:1
+}).addTo(map);
+
+headingArrow=L.marker(e.latlng,{
+icon:L.divIcon({
+className:"",
+html:"<div style='font-size:22px;color:#2563EB;'>▲</div>",
+iconSize:[22,22]
+})
+}).addTo(map);
+
+}else{
+
+userMarker.setLatLng(e.latlng);
+accuracyCircle.setLatLng(e.latlng);
+accuracyCircle.setRadius(e.accuracy);
+headingArrow.setLatLng(e.latlng);
+
 }
 
-// ----------------------------
-// LOAD PEOPLE
-// ----------------------------
-Papa.parse(CSV_URL,{
-  download:true,
-  header:true,
-  skipEmptyLines:true,
+// rotate arrow if heading available
 
-  complete:function(result){
+if(e.heading!=null){
 
-    let bounds=[];
-    let count=0;
+const el=headingArrow.getElement();
 
-    result.data.forEach(row=>{
+if(el){
 
-      if(territoryID && row.TerritoryID.trim()!=territoryID) return;
+el.style.transform=`rotate(${e.heading}deg)`;
 
-      const coord=(row.Coordinates||"").split(",");
+}
 
-      if(coord.length!==2) return;
+}
 
-      const lat=parseFloat(coord[0]);
-      const lng=parseFloat(coord[1]);
+if(followMe){
 
-      if(isNaN(lat)||isNaN(lng)) return;
+map.flyTo(e.latlng,18,{
+animate:true,
+duration:.5
+});
 
-      count++;
-      bounds.push([lat,lng]);
-
-      L.circleMarker([lat,lng],{
-        radius:5,
-        color:"#DC2626",
-        fillColor:"#DC2626",
-        fillOpacity:1
-      })
-      .addTo(map)
-      .bindPopup(
-        `<b>${row["Full Name"]}</b><br>${row.Address}`
-      );
-
-    });
-
-    if(count>0){
-
-      map.fitBounds(bounds,{padding:[40,40]});
-
-      document.getElementById("status").innerHTML =
-        `Territory ${territoryNumber} • ${count} houses`;
-
-    }else{
-
-      document.getElementById("status").innerHTML =
-        territoryID
-        ? `No houses found for ${territoryID}`
-        : "Showing all houses";
-
-    }
-
-  },
-
-  error:function(err){
-
-    console.error(err);
-
-    document.getElementById("status").innerHTML =
-      "Failed to load Google Sheet.";
-
-  }
+}
 
 });
+
+map.on("locationerror",function(e){
+
+console.log(e.message);
+
+});
+
+// continuous tracking
+
+map.locate({
+watch:true,
+setView:false,
+enableHighAccuracy:true,
+maximumAge:0,
+timeout:10000
+});
+
+// -------------------- LOAD HOUSES --------------------
+
+Papa.parse(CSV_URL,{
+
+download:true,
+header:true,
+skipEmptyLines:true,
+
+complete:function(result){
+
+let bounds=[];
+let count=0;
+
+result.data.forEach(row=>{
+
+if(territoryID && row.TerritoryID.trim()!=territoryID)return;
+
+const coord=(row.Coordinates||"").split(",");
+
+if(coord.length!==2)return;
+
+const lat=parseFloat(coord[0]);
+const lng=parseFloat(coord[1]);
+
+if(isNaN(lat)||isNaN(lng))return;
+
+count++;
+bounds.push([lat,lng]);
+
+L.circleMarker([lat,lng],{
+
+radius:5,
+color:"#DC2626",
+fillColor:"#DC2626",
+fillOpacity:1
+
+})
+.addTo(map)
+.bindPopup(
+`<b>${row["Full Name"]}</b><br>${row.Address}`
+);
+
+});
+
+if(count){
+
+document.getElementById("status").innerHTML=
+`Territory ${territoryNumber} • ${count} houses`;
+
+}else{
+
+document.getElementById("status").innerHTML=
+territoryID
+? `No houses found for ${territoryID}`
+: "Showing all houses";
+
+}
+
+},
+
+error:function(err){
+
+console.error(err);
+
+document.getElementById("status").innerHTML=
+"Failed to load Google Sheet.";
+
+}
+
+});
+
 </script>
 
 </body>
