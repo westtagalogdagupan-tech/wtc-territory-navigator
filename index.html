@@ -65,29 +65,21 @@ box-shadow:0 2px 8px rgba(0,0,0,.35);
 background:#DC2626;
 }
 
-.target{
-background:#16A34A;
-}
-
-.visited{
-background:#6B7280;
-}
+.target{background:#16A34A;}
+.visited{background:#6B7280;}
 
 .popup-btn{
 margin-top:8px;
-padding:9px 12px;
+padding:10px;
+width:100%;
 border:none;
 border-radius:8px;
-background:#2563EB;
-color:white;
 cursor:pointer;
-width:100%;
-font-size:14px;
+font-weight:bold;
 }
 
-.popup-btn.gray{
-background:#4B5563;
-}
+.popup-btn.blue{background:#2563EB;color:white;}
+.popup-btn.gray{background:#4B5563;color:white;}
 </style>
 </head>
 
@@ -103,7 +95,7 @@ background:#4B5563;
 
 <script>
 
-//================ CONFIG =================
+//================ CONFIG ================
 
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
@@ -111,9 +103,9 @@ const APP_ID="b471d87c-5f27-4245-9704-8c86379428fc";
 
 const params=new URLSearchParams(location.search);
 const territory=params.get("territory");
-const territoryID=territory?`T${territory.padStart(3,"0")}`:null;
+const territoryID=territory?`T${String(territory).padStart(3,"0")}`:null;
 
-//================ MAP =================
+//================ MAP ================
 
 const map=L.map("map").setView([16.043,120.334],14);
 
@@ -125,7 +117,7 @@ attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-//================ GPS =================
+//================ GPS ================
 
 let userMarker;
 let accuracyCircle;
@@ -187,13 +179,13 @@ highlightNearest();
 
 });
 
-//================ TERRITORY DATA =================
+//================ DATA ================
 
 let houses=[];
 let current=0;
 let bounds;
 
-//================ LOCAL VISITED =================
+//================ VISITED ================
 
 function visitedKey(){
 return `visited_${territoryID}`;
@@ -212,14 +204,14 @@ function updateStatus(){
 const visited=getVisited().length;
 
 document.getElementById("status").innerHTML=`
-Territory ${territory||""}
+Territory ${territory}
 <br>
 ${visited}/${houses.length} Visited
 `;
 
 }
 
-//================ ICONS =================
+//================ ICON ================
 
 function createIcon(number,state=""){
 
@@ -232,7 +224,7 @@ iconAnchor:[15,15]
 
 }
 
-//================ DISTANCE =================
+//================ DISTANCE ================
 
 function distance(a,b,c,d){
 
@@ -251,7 +243,7 @@ return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 
 }
 
-//================ NEAREST HOUSE =================
+//================ NEAREST HOUSE ================
 
 function highlightNearest(){
 
@@ -290,7 +282,7 @@ current=best;
 
 }
 
-//================ MARK VISITED =================
+//================ MARK VISITED ================
 
 function markVisited(id){
 
@@ -308,7 +300,7 @@ highlightNearest();
 
 }
 
-//================ LOAD HOUSES =================
+//================ LOAD CSV ================
 
 Papa.parse(CSV_URL,{
 download:true,
@@ -344,13 +336,13 @@ icon:createIcon(count)
 }).addTo(map);
 
 const appLink=
-`https://www.appsheet.com/start/${APP_ID}#control=People_Detail&row=${row.PeopleID}`;
+`appsheet://www.appsheet.com/start/${APP_ID}#control=People_Detail&row=${row.PeopleID}`;
 
 marker.bindPopup(`
 <b>${count}. ${row["Full Name"]}</b><br>
 ${row.Address}<br>
 
-<button class="popup-btn"
+<button class="popup-btn blue"
 onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}','_blank')">
 🧭 Navigate
 </button>
@@ -358,7 +350,7 @@ onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},
 <button class="popup-btn gray"
 onclick="
 markVisited('${row.PeopleID}');
-window.location.href='${appLink}';
+window.open('${appLink}','_top');
 ">
 ✅ Arrived
 </button>
@@ -376,9 +368,13 @@ list.push([lat,lng]);
 
 });
 
+if(list.length){
+
 bounds=L.latLngBounds(list);
 
 map.fitBounds(bounds,{padding:[40,40]});
+
+}
 
 updateStatus();
 highlightNearest();
@@ -387,7 +383,7 @@ highlightNearest();
 
 });
 
-//================ BUTTONS =================
+//================ BUTTONS ================
 
 document.getElementById("territoryBtn").onclick=()=>{
 
