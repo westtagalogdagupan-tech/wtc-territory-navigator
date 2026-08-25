@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
 <title>WTC Territory Navigator</title>
 
@@ -12,36 +12,36 @@
 
 <style>
 html,body,#map{
-    height:100%;
-    margin:0;
-    font-family:Arial,sans-serif;
+height:100%;
+margin:0;
+font-family:Arial,sans-serif;
 }
 
 #status{
-    position:absolute;
-    top:12px;
-    left:55px;
-    z-index:1000;
-    background:white;
-    padding:10px 14px;
-    border-radius:12px;
-    box-shadow:0 2px 10px rgba(0,0,0,.25);
-    font-weight:bold;
+position:absolute;
+top:12px;
+left:55px;
+z-index:1000;
+background:white;
+padding:10px 14px;
+border-radius:12px;
+box-shadow:0 2px 10px rgba(0,0,0,.25);
+font-weight:bold;
 }
 
 .fab{
-    position:absolute;
-    right:15px;
-    width:56px;
-    height:56px;
-    border:none;
-    border-radius:50%;
-    background:#2563EB;
-    color:white;
-    font-size:22px;
-    box-shadow:0 4px 12px rgba(0,0,0,.35);
-    cursor:pointer;
-    z-index:1000;
+position:absolute;
+right:15px;
+width:56px;
+height:56px;
+border:none;
+border-radius:50%;
+background:#2563EB;
+color:white;
+font-size:22px;
+box-shadow:0 4px 12px rgba(0,0,0,.35);
+cursor:pointer;
+z-index:1000;
 }
 
 #followBtn{bottom:90px;display:none;}
@@ -49,20 +49,21 @@ html,body,#map{
 #territoryBtn{bottom:230px;}
 
 .house-marker{
-    width:28px;
-    height:28px;
-    background:#DC2626;
-    color:white;
-    border-radius:50%;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-weight:bold;
-    border:2px solid white;
-    box-shadow:0 2px 6px rgba(0,0,0,.4);
+width:28px;
+height:28px;
+background:#DC2626;
+color:white;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-weight:bold;
+border:2px solid white;
+box-shadow:0 2px 6px rgba(0,0,0,.4);
 }
 </style>
 </head>
+
 <body>
 
 <div id="map"></div>
@@ -79,10 +80,12 @@ html,body,#map{
 
 const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
+// Get territory from AppSheet URL
 const params=new URLSearchParams(window.location.search);
-
-const territoryNumber=params.get("territory") || "5";
-const territoryID="T"+territoryNumber.padStart(3,"0");
+const territoryNumber=params.get("territory");
+const territoryID=territoryNumber
+? "T"+territoryNumber.padStart(3,"0")
+: null;
 
 // ---------------- MAP ----------------
 
@@ -153,12 +156,10 @@ accuracyCircle.setRadius(e.accuracy);
 }
 
 if(followMe){
-
 map.flyTo(e.latlng,18,{
 animate:true,
 duration:.5
 });
-
 }
 
 if(houses.length){
@@ -233,18 +234,19 @@ let count=0;
 
 result.data.forEach(row=>{
 
-if((row.TerritoryID||"").trim()!=territoryID) return;
+if(territoryID && (row.TerritoryID||"").trim()!==territoryID)
+return;
 
 const coord=(row.Coordinates||"").replace(/"/g,"").trim();
 
 const p=coord.split(",");
 
-if(p.length!=2) return;
+if(p.length!==2)return;
 
 const lat=parseFloat(p[0]);
 const lng=parseFloat(p[1]);
 
-if(isNaN(lat)||isNaN(lng)) return;
+if(isNaN(lat)||isNaN(lng))return;
 
 count++;
 
@@ -290,12 +292,16 @@ padding:[40,40]
 });
 
 document.getElementById("status").innerHTML=
-`Territory ${territoryNumber} • ${count} houses`;
+territoryNumber
+? `Territory ${territoryNumber} • ${count} houses`
+: `All Territories • ${count} houses`;
 
 }else{
 
 document.getElementById("status").innerHTML=
-`No houses found for ${territoryID}`;
+territoryNumber
+? `No houses found for ${territoryID}`
+: "No territory selected";
 
 }
 
@@ -331,7 +337,7 @@ padding:[40,40]
 
 document.getElementById("nextBtn").onclick=()=>{
 
-if(!houses.length) return;
+if(!houses.length)return;
 
 currentHouse++;
 
