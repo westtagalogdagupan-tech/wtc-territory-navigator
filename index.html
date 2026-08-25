@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 
 <title>WTC Territory Navigator</title>
 
@@ -27,6 +27,13 @@ padding:10px 14px;
 border-radius:12px;
 box-shadow:0 2px 10px rgba(0,0,0,.25);
 font-weight:bold;
+min-width:220px;
+}
+
+#debug{
+font-size:12px;
+color:#666;
+margin-top:4px;
 }
 
 .fab{
@@ -68,7 +75,10 @@ box-shadow:0 2px 6px rgba(0,0,0,.4);
 
 <div id="map"></div>
 
-<div id="status">Loading territory...</div>
+<div id="status">
+Loading...
+<div id="debug"></div>
+</div>
 
 <button id="territoryBtn" class="fab">🏠</button>
 <button id="nextBtn" class="fab">➡️</button>
@@ -76,18 +86,25 @@ box-shadow:0 2px 6px rgba(0,0,0,.4);
 
 <script>
 
-// ---------------- CONFIG ----------------
+// ===================== CONFIG =====================
 
-const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
+const CSV_URL =
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
 
-// Get territory from AppSheet URL
+// Read ?territory=1
 const params=new URLSearchParams(window.location.search);
 const territoryNumber=params.get("territory");
+
 const territoryID=territoryNumber
-? "T"+territoryNumber.padStart(3,"0")
+? `T${String(territoryNumber).padStart(3,"0")}`
 : null;
 
-// ---------------- MAP ----------------
+document.getElementById("debug").innerHTML=
+territoryID
+? `Looking for ${territoryID}`
+: "Showing all territories";
+
+// ===================== MAP =====================
 
 const map=L.map("map").setView([16.043,120.334],14);
 
@@ -99,7 +116,7 @@ attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-// ---------------- USER LOCATION ----------------
+// ===================== USER LOCATION =====================
 
 let userMarker=null;
 let accuracyCircle=null;
@@ -122,7 +139,6 @@ if(lastLocation) map.flyTo(lastLocation,18);
 map.locate({
 watch:true,
 enableHighAccuracy:true,
-setView:false,
 maximumAge:0
 });
 
@@ -162,23 +178,13 @@ duration:.5
 });
 }
 
-if(houses.length){
-
-const h=findNearestHouse(e.latlng.lat,e.latlng.lng);
-
-if(h) h.marker.openPopup();
-
-}
-
 });
 
-// ---------------- HOUSES ----------------
+// ===================== HOUSES =====================
 
 const houses=[];
 let currentHouse=0;
 let territoryBounds=null;
-
-// Distance helper
 
 function distance(lat1,lon1,lat2,lon2){
 
@@ -197,7 +203,7 @@ return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 
 }
 
-function findNearestHouse(lat,lng){
+function nearestHouse(lat,lng){
 
 let best=null;
 let bestDist=Infinity;
@@ -208,8 +214,8 @@ const d=distance(lat,lng,h.lat,h.lng);
 
 if(d<bestDist){
 
-bestDist=d;
 best=h;
+bestDist=d;
 currentHouse=i;
 
 }
@@ -220,7 +226,7 @@ return best;
 
 }
 
-// ---------------- LOAD PEOPLE ----------------
+// ===================== LOAD PEOPLE =====================
 
 Papa.parse(CSV_URL,{
 download:true,
@@ -229,24 +235,34 @@ skipEmptyLines:true,
 
 complete:function(result){
 
-let bounds=[];
 let count=0;
+let bounds=[];
+const foundIDs=new Set();
 
 result.data.forEach(row=>{
 
-if(territoryID && (row.TerritoryID||"").trim()!==territoryID)
-return;
+const rowID=String(row.TerritoryID||"")
+.replace(/"/g,"")
+.trim()
+.toUpperCase();
 
-const coord=(row.Coordinates||"").replace(/"/g,"").trim();
+if(rowID) foundIDs.add(rowID);
 
-const p=coord.split(",");
+// STRICT FILTER
+if(territoryID && rowID!==territoryID.toUpperCase()) return;
 
-if(p.length!==2)return;
+const coord=String(row.Coordinates||"")
+.replace(/"/g,"")
+.trim();
 
-const lat=parseFloat(p[0]);
-const lng=parseFloat(p[1]);
+const parts=coord.split(",");
 
-if(isNaN(lat)||isNaN(lng))return;
+if(parts.length!==2) return;
+
+const lat=parseFloat(parts[0]);
+const lng=parseFloat(parts[1]);
+
+if(isNaN(lat)||isNaN(lng)) return;
 
 count++;
 
@@ -274,9 +290,7 @@ Navigate
 houses.push({
 marker,
 lat,
-lng,
-name:row["Full Name"],
-address:row.Address
+lng
 });
 
 bounds.push([lat,lng]);
@@ -292,16 +306,14 @@ padding:[40,40]
 });
 
 document.getElementById("status").innerHTML=
-territoryNumber
-? `Territory ${territoryNumber} • ${count} houses`
-: `All Territories • ${count} houses`;
+`${territoryID||"All"} • ${count} houses
+<div id="debug">Looking for ${territoryID||"ALL"}</div>`;
 
 }else{
 
 document.getElementById("status").innerHTML=
-territoryNumber
-? `No houses found for ${territoryID}`
-: "No territory selected";
+`No houses found
+<div id="debug">Expected ${territoryID}<br>Found: ${Array.from(foundIDs).slice(0,10).join(", ")}</div>`;
 
 }
 
@@ -311,14 +323,13 @@ error:function(err){
 
 console.error(err);
 
-document.getElementById("status").innerHTML=
-"Failed to load Google Sheet";
+document.getElementById("status").innerHTML="Failed loading CSV";
 
 }
 
 });
 
-// ---------------- BUTTONS ----------------
+// ===================== BUTTONS =====================
 
 document.getElementById("territoryBtn").onclick=()=>{
 
@@ -337,7 +348,7 @@ padding:[40,40]
 
 document.getElementById("nextBtn").onclick=()=>{
 
-if(!houses.length)return;
+if(!houses.length) return;
 
 currentHouse++;
 
@@ -358,4 +369,4 @@ h.marker.openPopup();
 </script>
 
 </body>
-</html>
+</htm
