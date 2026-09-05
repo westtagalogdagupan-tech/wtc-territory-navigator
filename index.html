@@ -1,59 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-
 <title>WTC Territory Navigator</title>
 
-<link
-rel="stylesheet"
-href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
+html,body,#map{height:100%;margin:0;font-family:Arial,sans-serif;}
+#map{background:#f5f5f5;}
 
-html,body,#map{
-height:100%;
-margin:0;
-}
-
-#map{
-background:#f5f5f5;
-}
-
-.top-card{
-
+#status{
 position:absolute;
 top:12px;
-left:60px;
-z-index:999;
-
+left:50%;
+transform:translateX(-50%);
+z-index:1000;
 background:white;
-padding:10px 14px;
-border-radius:12px;
-font-family:Arial;
+padding:10px 16px;
+border-radius:14px;
+box-shadow:0 3px 12px rgba(0,0,0,.25);
 font-weight:bold;
-box-shadow:0 2px 10px rgba(0,0,0,.25);
-
+text-align:center;
+line-height:1.3;
 }
 
 .right-buttons{
-
 position:absolute;
 right:12px;
 bottom:22px;
-z-index:999;
-
+z-index:1000;
 display:flex;
 flex-direction:column;
 gap:10px;
-
 }
 
 .fab{
-
 width:54px;
 height:54px;
 border-radius:50%;
@@ -62,106 +47,158 @@ background:#2563EB;
 color:white;
 font-size:24px;
 cursor:pointer;
-box-shadow:0 4px 10px rgba(0,0,0,.35);
-
+box-shadow:0 4px 12px rgba(0,0,0,.35);
 }
+
+.house{
+width:30px;
+height:30px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+color:white;
+font-weight:bold;
+border:2px solid white;
+box-shadow:0 2px 8px rgba(0,0,0,.35);
+background:#DC2626;
+}
+
+.target{background:#16A34A;}
+.visited{background:#6B7280;}
 
 .popup-btn{
-
-width:100%;
-padding:10px;
+display:block;
 margin-top:8px;
-
+padding:10px;
+width:100%;
 border:none;
 border-radius:8px;
-cursor:pointer;
 font-weight:bold;
-
+cursor:pointer;
+text-decoration:none;
+text-align:center;
+box-sizing:border-box;
 }
 
-.blue{
-
-background:#2563EB;
-color:white;
-
-}
-
-.gray{
-
-background:#444;
-color:white;
-
-}
-
-.green{
-
-background:#16A34A;
-color:white;
-
-}
-
+.blue{background:#2563EB;color:white;}
+.gray{background:#4B5563;color:white;}
 </style>
-
 </head>
 
 <body>
 
 <div id="map"></div>
 
-<div class="top-card" id="territoryCard">
-Loading...
-</div>
+<div id="status">Loading territory...</div>
 
 <div class="right-buttons">
-
 <button class="fab" onclick="goHome()">🏠</button>
-
-<button class="fab" onclick="toggleFollow()" id="followBtn">
-📍
-</button>
-
+<button class="fab" onclick="toggleFollow()" id="followBtn">📍</button>
 </div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
 
-const params=new URLSearchParams(location.search);
+//================ CONFIG ================
 
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSb2166VYuLVnakRbv1zBaA_GT5WhZhRpMRELIzktsQBUDSPY8J_2u0BJMJKyjy9XBGnZaNm_Iotlxu/pub?gid=150380614&single=true&output=csv";
+
+const params=new URLSearchParams(location.search);
 const territory=params.get("territory");
 const person=params.get("person");
 
-const map=L.map("map",{zoomControl:true});
+const territoryID=territory
+?`T${String(territory).padStart(3,"0")}`
+:null;
+
+//================ MAP ================
+
+const map=L.map("map").setView([16.043,120.334],14);
 
 L.tileLayer(
 "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 {
-maxZoom:20
+maxZoom:20,
+attribution:"© OpenStreetMap"
 }
 ).addTo(map);
 
-let markers=[];
-let lastLocation=null;
+//================ GPS ================
+
 let followUser=true;
+let lastLocation=null;
 let userMarker=null;
 let accuracyCircle=null;
-let nearestMarker=null;
 
-const CSV_URL="YOUR_CSV_URL_HERE";
+function startLiveGPS(){
 
-function distance(lat1,lon1,lat2,lon2){
+if(!navigator.geolocation){
 
-const R=6371000;
+alert("GPS not supported.");
 
-const dLat=(lat2-lat1)*Math.PI/180;
-const dLon=(lon2-lon1)*Math.PI/180;
+return;
 
-const a=Math.sin(dLat/2)**2+
-Math.cos(lat1*Math.PI/180)*
-Math.cos(lat2*Math.PI/180)*
-Math.sin(dLon/2)**2;
+}
 
-return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+navigator.geolocation.watchPosition(
+
+(position)=>{
+
+const lat=position.coords.latitude;
+const lng=position.coords.longitude;
+const accuracy=position.coords.accuracy;
+
+lastLocation={lat,lng};
+
+const pos=[lat,lng];
+
+if(!userMarker){
+
+userMarker=L.circleMarker(pos,{
+radius:8,
+color:"#fff",
+weight:2,
+fillColor:"#2563EB",
+fillOpacity:1
+}).addTo(map);
+
+accuracyCircle=L.circle(pos,{
+radius:accuracy,
+color:"#2563EB",
+fillOpacity:.15,
+weight:1
+}).addTo(map);
+
+map.setView(pos,18);
+
+}else{
+
+userMarker.setLatLng(pos);
+
+accuracyCircle.setLatLng(pos);
+accuracyCircle.setRadius(accuracy);
+
+if(followUser){
+
+map.panTo(pos,{animate:true});
+
+}
+
+}
+
+highlightNearest();
+
+},
+
+(err)=>console.log(err),
+
+{
+enableHighAccuracy:true,
+maximumAge:0,
+timeout:10000
+}
+
+);
 
 }
 
@@ -185,185 +222,229 @@ followUser=!followUser;
 document.getElementById("followBtn").innerHTML=
 followUser?"📍":"🧭";
 
+if(followUser&&lastLocation){
+
+goHome();
+
 }
 
-function highlightNearestHouse(){
+}
+
+//================ DATA ================
+
+let houses=[];
+let current=0;
+let bounds;
+
+//================ VISITED ================
+
+function visitedKey(){
+
+return `visited_${territoryID}`;
+
+}
+
+function getVisited(){
+
+return JSON.parse(
+localStorage.getItem(visitedKey())||"[]"
+);
+
+}
+
+function saveVisited(v){
+
+localStorage.setItem(
+visitedKey(),
+JSON.stringify(v)
+);
+
+}
+
+function markVisited(id){
+
+const v=getVisited();
+
+if(!v.includes(id)){
+
+v.push(id);
+
+saveVisited(v);
+
+}
+
+updateStatus();
+highlightNearest();
+
+}
+
+//================ STATUS ================
+
+function updateStatus(){
+
+document.getElementById("status").innerHTML=
+`Territory ${territory}<br>${getVisited().length}/${houses.length} Visited`;
+
+}
+
+//================ MARKERS ================
+
+function markerIcon(num,state=""){
+
+return L.divIcon({
+
+className:"",
+
+html:`<div class="house ${state}">${num}</div>`,
+
+iconSize:[30,30],
+iconAnchor:[15,15]
+
+});
+
+}
+
+//================ DISTANCE ================
+
+function distance(a,b,c,d){
+
+const R=6371000;
+
+const dLat=(c-a)*Math.PI/180;
+const dLon=(d-b)*Math.PI/180;
+
+const x=
+Math.sin(dLat/2)**2+
+Math.cos(a*Math.PI/180)*
+Math.cos(c*Math.PI/180)*
+Math.sin(dLon/2)**2;
+
+return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+
+}
+
+//================ NEAREST ================
+
+function highlightNearest(){
 
 if(!lastLocation)return;
 
-let nearest=null;
-let best=999999;
+const visited=getVisited();
 
-markers.forEach(m=>{
+let best=-1;
+let bestDist=Infinity;
+
+houses.forEach((h,i)=>{
+
+const state=visited.includes(h.id)
+?"visited":"";
+
+h.marker.setIcon(
+markerIcon(h.number,state)
+);
 
 const d=distance(
 lastLocation.lat,
 lastLocation.lng,
-m.lat,
-m.lng
+h.lat,
+h.lng
 );
 
-if(d<best){
+if(!visited.includes(h.id)&&d<bestDist){
 
-best=d;
-nearest=m;
+best=i;
+bestDist=d;
 
 }
 
 });
 
-if(nearestMarker){
+if(best>=0){
 
-nearestMarker.setStyle({
-fillColor:"#DC2626"
-});
-
-}
-
-if(nearest){
-
-nearest.marker.setStyle({
-fillColor:"#16A34A"
-});
-
-nearestMarker=nearest.marker;
-
-}
-
-}
-
-function startGPS(){
-
-navigator.geolocation.watchPosition(
-
-p=>{
-
-lastLocation={
-
-lat:p.coords.latitude,
-lng:p.coords.longitude
-
-};
-
-const pos=[lastLocation.lat,lastLocation.lng];
-
-if(!userMarker){
-
-userMarker=L.circleMarker(pos,{
-radius:8,
-color:"#fff",
-weight:2,
-fillColor:"#2563EB",
-fillOpacity:1
-}).addTo(map);
-
-accuracyCircle=L.circle(pos,{
-radius:p.coords.accuracy,
-color:"#2563EB",
-fillOpacity:.15
-}).addTo(map);
-
-map.setView(pos,18);
-
-}else{
-
-userMarker.setLatLng(pos);
-
-accuracyCircle.setLatLng(pos);
-accuracyCircle.setRadius(p.coords.accuracy);
-
-if(followUser){
-
-map.panTo(pos);
-
-}
-
-}
-
-highlightNearestHouse();
-
-},
-
-e=>console.log(e),
-
-{
-
-enableHighAccuracy:true,
-maximumAge:0,
-timeout:10000
-
-}
-
+houses[best].marker.setIcon(
+markerIcon(houses[best].number,"target")
 );
 
+current=best;
+
 }
 
-async function loadData(){
+}
 
-const text=await fetch(CSV_URL).then(r=>r.text());
+//================ LOAD CSV ================
 
-const rows=text.trim().split("\n");
+Papa.parse(CSV_URL,{
 
-const head=rows.shift().split(",");
+download:true,
+header:true,
+skipEmptyLines:true,
 
-let total=0;
-let visited=0;
+complete:(res)=>{
 
-rows.forEach(r=>{
+let count=0;
+let pts=[];
 
-const c=r.split(",");
+res.data.forEach(row=>{
 
-const row={};
+const tid=String(row.TerritoryID||"")
+.trim()
+.toUpperCase();
 
-head.forEach((h,i)=>row[h]=c[i]);
+if(territoryID&&tid!==territoryID)return;
 
-if(territory&&String(row.TerritoryNumber)!=territory)return;
+const coord=String(row.Coordinates||"")
+.replace(/"/g,"")
+.trim()
+.split(",");
 
-const lat=parseFloat(row.Latitude);
-const lng=parseFloat(row.Longitude);
+if(coord.length!==2)return;
+
+const lat=parseFloat(coord[0]);
+const lng=parseFloat(coord[1]);
 
 if(isNaN(lat)||isNaN(lng))return;
 
-total++;
+count++;
 
-if(row.Visited==="TRUE")visited++;
-
-const marker=L.circleMarker([lat,lng],{
-
-radius:8,
-fillColor:"#DC2626",
-fillOpacity:1,
-color:"#fff",
-weight:2
-
-}).addTo(map);
-
-markers.push({
-
-marker,
-lat,
-lng
-
-});
+const marker=L.marker(
+[lat,lng],
+{
+icon:markerIcon(count)
+}
+).addTo(map);
 
 const appLink=row.AppLink||"#";
 
 marker.bindPopup(`
-<b>${row.HouseNumber}. ${row["Full Name"]}</b><br>
+<b>${count}. ${row["Full Name"]}</b><br>
 ${row.Address}<br>
 
-<button class="popup-btn blue"
-onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}','_blank')">
-Navigate
-</button>
+<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}"
+target="_blank"
+class="popup-btn blue">
+🧭 Navigate
+</a>
 
 <button class="popup-btn gray"
 onclick="
+markVisited('${row.PeopleID}');
 location.replace('${appLink}');
 ">
-Arrived
+✅ Arrived
 </button>
 `);
+
+houses.push({
+
+id:row.PeopleID,
+number:count,
+lat,
+lng,
+marker
+
+});
+
+pts.push([lat,lng]);
 
 if(person&&row.PeopleID===person){
 
@@ -375,22 +456,41 @@ map.setView([lat,lng],19);
 
 });
 
-document.getElementById("territoryCard").innerHTML=
-`Territory ${territory||"-"}<br>${visited}/${total} Visited`;
+if(pts.length){
 
-if(markers.length&&!person){
+bounds=L.latLngBounds(pts);
 
-const g=L.featureGroup(markers.map(m=>m.marker));
+if(!person){
 
-map.fitBounds(g.getBounds(),{padding:[40,40]});
-
-}
+map.fitBounds(bounds,{padding:[40,40]});
 
 }
 
-loadData();
+}
 
-startGPS();
+updateStatus();
+
+startLiveGPS();
+
+}
+
+});
+
+//================ NEXT HOUSE ================
+
+function nextHouse(){
+
+if(!houses.length)return;
+
+current=(current+1)%houses.length;
+
+const h=houses[current];
+
+map.flyTo([h.lat,h.lng],19);
+
+h.marker.openPopup();
+
+}
 
 </script>
 
